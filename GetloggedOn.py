@@ -158,7 +158,7 @@ class Checker:
                     logging.info("[%-15s] No logged users", host)
                     return
 
-                # Разрешение SID
+                # Разрешение SID (модифицированная секция)
                 try:
                     lsa_binding = r'ncacn_np:%s[\pipe\lsarpc]' % target_ip
                     rpc = transport.DCERPCTransportFactory(lsa_binding)
@@ -180,7 +180,8 @@ class Checker:
 
                     logged_users = []
                     for item in resp['TranslatedNames']['Names']:
-                        if item['Use'] == SID_NAME_USE.SidTypeUser:
+                        # Фильтрация пользователей с $ в конце имени
+                        if item['Use'] == SID_NAME_USE.SidTypeUser and not item['Name'].endswith('$'):
                             domain = resp['ReferencedDomains']['Domains'][item['DomainIndex']]['Name']
                             logged_users.append(f"{domain}\\{item['Name']}")
 
