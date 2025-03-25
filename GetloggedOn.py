@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 from __future__ import division, print_function
 import re
-import codecs
 import logging
 import time
 import argparse
@@ -133,7 +132,6 @@ class Checker:
                 remote_ops.connectWinReg()
                 dce = remote_ops.getRRP()
                 
-                # Получение списка пользователей
                 users = []
                 try:
                     resp = rrp.hOpenUsers(dce)
@@ -147,7 +145,7 @@ class Checker:
                                 users.append(userSid)
                             index += 1
                         except DCERPCException as e:
-                            if e.get_error_code() == 0x103:  # ERROR_NO_MORE_ITEMS
+                            if e.get_error_code() == 0x103:
                                 break
                             raise
                 except Exception as e:
@@ -158,7 +156,6 @@ class Checker:
                     logging.info("[%-15s] No logged users", host)
                     return
 
-                # Разрешение SID (модифицированная секция)
                 try:
                     lsa_binding = r'ncacn_np:%s[\pipe\lsarpc]' % target_ip
                     rpc = transport.DCERPCTransportFactory(lsa_binding)
@@ -180,7 +177,6 @@ class Checker:
 
                     logged_users = []
                     for item in resp['TranslatedNames']['Names']:
-                        # Фильтрация пользователей с $ в конце имени
                         if item['Use'] == SID_NAME_USE.SidTypeUser and not item['Name'].endswith('$'):
                             domain = resp['ReferencedDomains']['Domains'][item['DomainIndex']]['Name']
                             logged_users.append(f"{domain}\\{item['Name']}")
@@ -212,7 +208,7 @@ def main():
     parser = argparse.ArgumentParser(description="Windows Logon Checker (Multi-Threaded)")
     parser.add_argument('target', nargs='?', help='[[domain/]username[:password]@]<target>')
     parser.add_argument('--host-file', help='File containing list of hosts')
-    parser.add_argument('--threads', type=int, default=10, help='Number of concurrent threads')
+    parser.add_argument('--threads', type=int, default=1, help='Number of concurrent threads (default: 1)')
     parser.add_argument('--timeout', type=int, default=5, help='Connection timeout in seconds')
     parser.add_argument('-port', choices=['139', '445'], default='445', help='SMB port')
     parser.add_argument('-hashes', metavar="LMHASH:NTHASH", help='NTLM hashes')
@@ -234,11 +230,9 @@ def main():
     else:
         logging.getLogger().setLevel(logging.INFO)
 
-    # Parse credentials
     domain, username, password, remote_name = parse_target(options.target or '')
     password = password if not options.no_pass else ''
 
-    # Get targets
     targets = []
     if options.host_file:
         try:
@@ -255,10 +249,8 @@ def main():
         logging.error("No targets specified!")
         return
 
-    # Create checker instance
     checker = Checker(username, password, domain, options)
 
-    # Run checks with thread pool
     with ThreadPoolExecutor(max_workers=options.threads) as executor:
         futures = {executor.submit(checker.check_host, host): host for host in targets}
         
