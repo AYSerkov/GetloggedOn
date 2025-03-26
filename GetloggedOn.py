@@ -108,9 +108,15 @@ class Checker:
         self.aesKey = options.aesKey
         self.timeout = options.timeout
         self.port = int(options.port)
+        self.output_file = options.output_file
         
         if options.hashes:
             self.lmhash, self.nthash = options.hashes.split(':')
+
+    def write_to_file(self, message):
+        if self.output_file:
+            with open(self.output_file, 'a') as f:
+                f.write(message + '\n')
 
     def check_host(self, host):
         target_ip = self.options.target_ip or host
@@ -149,11 +155,15 @@ class Checker:
                                 break
                             raise
                 except Exception as e:
-                    logging.error("[%-15s] Registry error: %s", host, str(e))
+                    error_msg = f"[{host:15}] Registry error: {str(e)}"
+                    logging.error(error_msg)
+                    self.write_to_file(error_msg)
                     return
 
                 if not users:
-                    logging.info("[%-15s] No logged users", host)
+                    msg = f"[{host:15}] No logged users"
+                    logging.info(msg)
+                    self.write_to_file(msg)
                     return
 
                 try:
@@ -182,26 +192,40 @@ class Checker:
                             logged_users.append(f"{domain}\\{item['Name']}")
 
                     if logged_users:
-                        logging.info("[%-15s] Logged users: %s", host, ", ".join(logged_users))
+                        msg = f"[{host:15}] Logged users: {', '.join(logged_users)}"
+                        logging.info(msg)
+                        self.write_to_file(msg)
                     else:
-                        logging.info("[%-15s] No active logons", host)
+                        msg = f"[{host:15}] No active logons"
+                        logging.info(msg)
+                        self.write_to_file(msg)
 
                 except Exception as e:
-                    logging.error("[%-15s] LSA error: %s", host, str(e))
+                    error_msg = f"[{host:15}] LSA error: {str(e)}"
+                    logging.error(error_msg)
+                    self.write_to_file(error_msg)
 
             except Exception as e:
-                logging.error("[%-15s] Check failed: %s", host, str(e))
+                error_msg = f"[{host:15}] Check failed: {str(e)}"
+                logging.error(error_msg)
+                self.write_to_file(error_msg)
             
             finally:
                 remote_ops.finish()
                 smb.logoff()
 
         except (SessionError, socket.timeout, socket.error) as e:
-            logging.error("[%-15s] Connection failed: %s", host, str(e))
+            error_msg = f"[{host:15}] Connection failed: {str(e)}"
+            logging.error(error_msg)
+            self.write_to_file(error_msg)
         except Exception as e:
-            logging.error("[%-15s] Error: %s", host, str(e))
+            error_msg = f"[{host:15}] Error: {str(e)}"
+            logging.error(error_msg)
+            self.write_to_file(error_msg)
         finally:
-            logging.debug("[%-15s] Check completed in %.2fs", host, time.time()-start_time)
+            debug_msg = f"[{host:15}] Check completed in {time.time()-start_time:.2f}s"
+            logging.debug(debug_msg)
+            self.write_to_file(debug_msg)
 
 def main():
     print(version.BANNER)
@@ -218,6 +242,7 @@ def main():
     parser.add_argument('-target-ip', metavar="ip", help='Target server IP')
     parser.add_argument('-debug', action='store_true', help='Enable debug output')
     parser.add_argument('-no-pass', action='store_true', help='Don\'t ask for password')
+    parser.add_argument('-o', '--output-file', help='Output file to write results')
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -259,7 +284,11 @@ def main():
             try:
                 future.result()
             except Exception as e:
-                logging.error("[%-15s] Unhandled error: %s", host, str(e))
+                error_msg = f"[{host:15}] Unhandled error: {str(e)}"
+                logging.error(error_msg)
+                if options.output_file:
+                    with open(options.output_file, 'a') as f:
+                        f.write(error_msg + '\n')
 
 if __name__ == '__main__':
     main()
