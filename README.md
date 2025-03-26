@@ -1,7 +1,7 @@
 # Базовая проверка одного хоста
 python GetloggedOn.py administrator:pass@192.168.1.10
 
-# С файлом хостов и 2 потоками
+# С файлом хостов и 2 потоками (дефолт в 1 поток, лучше в 1)
 python GetloggedOn.py --threads 2 domain.local/user:pass@ --host-file hosts.txt
 
 # С аутентификацией по хешам
