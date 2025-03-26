@@ -24,7 +24,7 @@ class RemoteOperations:
         self.__smbConnection = smbConnection
         self.__smbConnection.setTimeout(timeout)
         self.__serviceName = 'RemoteRegistry'
-        self.__stringBindingWinReg = r'ncacn_np:445[\pipe\winreg]'
+        self.__stringBindingWinReg = r'ncacn_np:%s[\pipe\winreg]' % self.__smbConnection.getRemoteHost()
         self.__rrp = None
         self.__doKerberos = doKerberos
         self.__kdcHost = kdcHost
@@ -38,6 +38,19 @@ class RemoteOperations:
         return self.__rrp
 
     def connectWinReg(self):
+        # Подключаемся к SCM для управления службой RemoteRegistry
+        stringBinding = r'ncacn_np:%s[\pipe\svcctl]' % self.__smbConnection.getRemoteHost()
+        rpctransport = transport.DCERPCTransportFactory(stringBinding)
+        rpctransport.set_smb_connection(self.__smbConnection)
+        rpctransport.set_connect_timeout(self.__timeout)
+        self.__scmr = rpctransport.get_dce_rpc()
+        self.__scmr.connect()
+        self.__scmr.bind(scmr.MSRPC_UUID_SCMR)
+
+        # Проверяем и запускаем службу RemoteRegistry если нужно
+        self.__checkServiceStatus()
+
+        # Теперь подключаемся к winreg
         try:
             rpc = transport.DCERPCTransportFactory(self.__stringBindingWinReg)
             rpc.set_smb_connection(self.__smbConnection)
@@ -47,7 +60,14 @@ class RemoteOperations:
             self.__rrp.bind(rrp.MSRPC_UUID_RRP)
         except Exception as e:
             logging.warning(f"RemoteRegistry connection attempt failed: {str(e)}")
-            raise
+            # Делаем еще одну попытку после небольшой задержки
+            time.sleep(2)
+            rpc = transport.DCERPCTransportFactory(self.__stringBindingWinReg)
+            rpc.set_smb_connection(self.__smbConnection)
+            rpc.set_connect_timeout(self.__timeout)
+            self.__rrp = rpc.get_dce_rpc()
+            self.__rrp.connect()
+            self.__rrp.bind(rrp.MSRPC_UUID_RRP)
 
     def __checkServiceStatus(self):
         try:
@@ -72,7 +92,7 @@ class RemoteOperations:
                     self.__disabled = True
                     scmr.hRChangeServiceConfigW(self.__scmr, self.__serviceHandle, dwStartType=0x3)
                 scmr.hRStartServiceW(self.__scmr, self.__serviceHandle)
-                time.sleep(0.5)
+                time.sleep(1) # Увеличиваем задержку для надежности
 
         except Exception as e:
             logging.error(f"Service check failed: {str(e)}")
